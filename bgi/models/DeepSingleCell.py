@@ -41,7 +41,7 @@ def multi_embedding_attention_transfer(supvised_train: bool = False,
         for max_length, name in zip(multi_max_features, mult_feature_names):
             # 输入
             feature_input = Input(shape=(None,), name='Input-{}-Feature'.format(name))
-            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float')
+            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float32')
             x_feature_inputs.append(feature_input)
             x_value_inputs.append(value_input)
 
@@ -71,7 +71,7 @@ def multi_embedding_attention_transfer(supvised_train: bool = False,
         for max_length, name in zip(multi_max_features, mult_feature_names):
             # 输入
 
-            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float')
+            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float32')
 
             x_value_inputs.append(value_input)
 
@@ -129,7 +129,7 @@ def multi_embedding_attention_transfer_1(supvised_train: bool = False,
         for max_length, name in zip(multi_max_features, mult_feature_names):
             # 输入
             feature_input = Input(shape=(None,), name='Input-{}-Feature'.format(name))
-            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float')
+            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float32')
             x_feature_inputs.append(feature_input)
             x_value_inputs.append(value_input)
 
@@ -159,7 +159,7 @@ def multi_embedding_attention_transfer_1(supvised_train: bool = False,
         for max_length, name in zip(multi_max_features, mult_feature_names):
             # 输入
 
-            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float')
+            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float32')
 
             x_value_inputs.append(value_input)
 
@@ -216,7 +216,7 @@ def multi_embedding_attention_transfer_explainability(supvised_train: bool = Fal
         for max_length, name in zip(multi_max_features, mult_feature_names):
             # 输入
             feature_input = Input(shape=(None,), name='Input-{}-Feature'.format(name))
-            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float')
+            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float32')
             x_feature_inputs.append(feature_input)
             x_value_inputs.append(value_input)
 
@@ -246,7 +246,7 @@ def multi_embedding_attention_transfer_explainability(supvised_train: bool = Fal
         for max_length, name in zip(multi_max_features, mult_feature_names):
             # 输入
 
-            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float')
+            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float32')
 
             x_value_inputs.append(value_input)
 

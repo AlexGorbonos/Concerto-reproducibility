@@ -1,287 +1,96 @@
 import tensorflow as tf
-from tensorflow.keras.models import Model  # layers, Sequential, optimizers, losses, metrics, datasets
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.layers import Embedding, Input
-from tensorflow.keras.layers import GlobalAveragePooling1D,Dropout
-from tensorflow.keras.layers import concatenate
-from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import Add
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, Embedding, Input
+from tensorflow.keras.layers import Dropout, BatchNormalization, Add
+from tensorflow.keras.layers import Layer
 import tensorflow.keras.backend as K
-from tensorflow.keras import regularizers
-from tensorflow.keras import optimizers, losses, metrics, datasets
 from bgi.layers.attention import AttentionWithContext
 
 
+class ExpandDimsLayer(Layer):
+    def __init__(self, axis, name=None):
+        super(ExpandDimsLayer, self).__init__(name=name)
+        self.axis = axis
 
-def multi_embedding_attention_transfer(supvised_train: bool = False,
-                                    scan_train: bool = False,
-                                    multi_max_features: list = [40000],
-                                    mult_feature_names: list = ['Gene'],
-                                    embedding_dims=128,
-                                    num_classes=5,
-                                    activation='softmax',
-                                    head_1=128,
-                                    head_2=128,
-                                    head_3=128,
-                                    drop_rate=0.05,
-                                    include_attention: bool = False,
-                                    use_bias=True,
-                                    ):
+    def call(self, inputs):
+        return tf.expand_dims(inputs, axis=self.axis)
+
+    def get_config(self):
+        config = super(ExpandDimsLayer, self).get_config()
+        config.update({"axis": self.axis})
+        return config
+
+
+def multi_embedding_attention_transfer(
+    supvised_train: bool = False,
+    scan_train: bool = False,
+    multi_max_features: list = [40000],
+    mult_feature_names: list = ['Gene'],
+    embedding_dims=128,
+    num_classes=5,
+    activation='softmax',
+    head_1=128,
+    head_2=128,
+    head_3=128,
+    drop_rate=0.05,
+    include_attention: bool = False,
+    use_bias=True,
+):
     assert len(multi_max_features) == len(mult_feature_names)
 
-    # 特征索引
     x_feature_inputs = []
-    # 特征值
     x_value_inputs = []
-    # 特征向量
-    embeddings = []
     features = []
-    weight_output_all = []
-    if include_attention == True:
+
+    if include_attention:
         for max_length, name in zip(multi_max_features, mult_feature_names):
-            # 输入
-            feature_input = Input(shape=(None,), name='Input-{}-Feature'.format(name))
-            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float32')
+            feature_input = Input(shape=(None,), name=f'Input-{name}-Feature')
+            value_input = Input(shape=(None,), name=f'Input-{name}-Value', dtype='float32')
             x_feature_inputs.append(feature_input)
             x_value_inputs.append(value_input)
 
-            # 向量
-            embedding = Embedding(max_length, embedding_dims, input_length=None, name='{}-Embedding'.format(name))(
-                feature_input)
+            embedding = Embedding(
+                max_length, embedding_dims, input_length=None, name=f'{name}-Embedding'
+            )(feature_input)
 
-            # 向量 * 特征值
-            sparse_value = tf.expand_dims(value_input, 2, name='{}-Expend-Dims'.format(name))
-            sparse_value = BatchNormalization(name='{}-BN-1'.format(name))(sparse_value)
-            x = tf.multiply(embedding, sparse_value, name='{}-Multiply'.format(name))
-            # x = BatchNormalization(name='{}-BN-2'.format(name))(x)
+            sparse_value = ExpandDimsLayer(axis=2, name=f'{name}-Expand-Dims')(value_input)
+            sparse_value = BatchNormalization(name=f'{name}-BN-1')(sparse_value)
+            x = tf.multiply(embedding, sparse_value, name=f'{name}-Multiply')
 
-            # # Attention
-            weight_output,a = AttentionWithContext()(x)
+            weight_output, a = AttentionWithContext()(x)
             x = K.tanh(K.sum(weight_output, axis=1))
-
-            x = BatchNormalization(name='{}-BN-3'.format(name))(x)
+            x = BatchNormalization(name=f'{name}-BN-3')(x)
 
             features.append(x)
-            #weight_output_all.append(a)
-        inputs = []
-        inputs.append(x_feature_inputs)
-        inputs.append(x_value_inputs)
+
+        inputs = x_feature_inputs + x_value_inputs
 
     else:
         for max_length, name in zip(multi_max_features, mult_feature_names):
-            # 输入
-
-            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float32')
-
+            value_input = Input(shape=(max_length,), name=f'Input-{name}-Value', dtype='float32')
             x_value_inputs.append(value_input)
 
-            # 向量 * 特征值
-            sparse_value = BatchNormalization(name='{}-BN-1'.format(name))(value_input)
-
-            x = Dense(head_1, name='{}-projection-0'.format(name), activation='relu')(sparse_value)
-
-
-            x = BatchNormalization(name='{}-BN-3'.format(name))(x)
-
+            sparse_value = BatchNormalization(name=f'{name}-BN-1')(value_input)
+            x = Dense(head_1, name=f'{name}-Projection-0', activation='relu')(sparse_value)
+            x = BatchNormalization(name=f'{name}-BN-3')(x)
             features.append(x)
-        inputs = []
-        inputs.append(x_value_inputs)
-    # Concatenate
+
+        inputs = x_value_inputs
+
     if len(features) > 1:
-    #feature = concatenate(features)
-        feature = Add()([features[0],features[1]])
+        feature = Add()(features)
     else:
         feature = features[0]
-    dropout = Dropout(rate=drop_rate)(feature)
-    output = Dense(head_1, name='projection-1', activation='relu')(dropout)
 
-    # inputs = []
-    # inputs.append(x_feature_inputs)
-    # inputs.append(x_value_inputs)
+    dropout = Dropout(rate=drop_rate)(feature)
+    output = Dense(head_1, name='Projection-1', activation='relu')(dropout)
+
     return tf.keras.Model(inputs=inputs, outputs=output)
 
 
-def multi_embedding_attention_transfer_1(supvised_train: bool = False,
-                                    scan_train: bool = False,
-                                    multi_max_features: list = [40000],
-                                    mult_feature_names: list = ['Gene'],
-                                    embedding_dims=128,
-                                    num_classes=5,
-                                    activation='softmax',
-                                    head_1=128,
-                                    head_2=128,
-                                    head_3=128,
-                                    drop_rate=0.05,
-                                    include_attention: bool = False,
-                                    use_bias=True,
-                                    ):
-    assert len(multi_max_features) == len(mult_feature_names)
-
-    # 特征索引
-    x_feature_inputs = []
-    # 特征值
-    x_value_inputs = []
-    # 特征向量
-    embeddings = []
-    features = []
-    weight_output_all = []
-    if include_attention == True:
-        for max_length, name in zip(multi_max_features, mult_feature_names):
-            # 输入
-            feature_input = Input(shape=(None,), name='Input-{}-Feature'.format(name))
-            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float32')
-            x_feature_inputs.append(feature_input)
-            x_value_inputs.append(value_input)
-
-            # 向量
-            embedding = Embedding(max_length, embedding_dims, input_length=None, name='{}-Embedding'.format(name))(
-                feature_input)
-
-            # 向量 * 特征值
-            sparse_value = tf.expand_dims(value_input, 2, name='{}-Expend-Dims'.format(name))
-            sparse_value = BatchNormalization(name='{}-BN-1'.format(name))(sparse_value)
-            x = tf.multiply(embedding, sparse_value, name='{}-Multiply'.format(name))
-            # x = BatchNormalization(name='{}-BN-2'.format(name))(x)
-
-            # # Attention
-            weight_output,a = AttentionWithContext()(x)
-            x = K.tanh(K.sum(weight_output, axis=1))
-
-            x = BatchNormalization(name='{}-BN-3'.format(name))(x)
-
-            features.append(x)
-            weight_output_all.append(a)
-        inputs = []
-        inputs.append(x_feature_inputs)
-        inputs.append(x_value_inputs)
-
-    else:
-        for max_length, name in zip(multi_max_features, mult_feature_names):
-            # 输入
-
-            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float32')
-
-            x_value_inputs.append(value_input)
-
-            # 向量 * 特征值
-            sparse_value = BatchNormalization(name='{}-BN-1'.format(name))(value_input)
-
-            x = Dense(head_1, name='{}-projection-0'.format(name), activation='relu')(sparse_value)
-
-
-            x = BatchNormalization(name='{}-BN-3'.format(name))(x)
-
-            features.append(x)
-        inputs = []
-        inputs.append(x_value_inputs)
-    # Concatenate
-    if len(features) > 1:
-    #feature = concatenate(features)
-        feature = Add()([features[0],features[1]])
-    else:
-        feature = features[0]
-    dropout = Dropout(rate=drop_rate)(feature)
-    output = Dense(head_1, name='projection-1', activation='relu')(dropout)
-
-    # inputs = []
-    # inputs.append(x_feature_inputs)
-    # inputs.append(x_value_inputs)
-    return tf.keras.Model(inputs=inputs, outputs=[output,weight_output_all])
-
-def multi_embedding_attention_transfer_explainability(supvised_train: bool = False,
-                                    scan_train: bool = False,
-                                    multi_max_features: list = [40000],
-                                    mult_feature_names: list = ['Gene'],
-                                    embedding_dims=128,
-                                    num_classes=5,
-                                    activation='softmax',
-                                    head_1=128,
-                                    head_2=128,
-                                    head_3=128,
-                                    drop_rate=0.05,
-                                    include_attention: bool = False,
-                                    use_bias=True,
-                                    ):
-    assert len(multi_max_features) == len(mult_feature_names)
-
-    # 特征索引
-    x_feature_inputs = []
-    # 特征值
-    x_value_inputs = []
-    # 特征向量
-    embeddings = []
-    features = []
-    weight_output_all = []
-    if include_attention == True:
-        for max_length, name in zip(multi_max_features, mult_feature_names):
-            # 输入
-            feature_input = Input(shape=(None,), name='Input-{}-Feature'.format(name))
-            value_input = Input(shape=(None,), name='Input-{}-Value'.format(name), dtype='float32')
-            x_feature_inputs.append(feature_input)
-            x_value_inputs.append(value_input)
-
-            # 向量
-            embedding = Embedding(max_length, embedding_dims, input_length=None, name='{}-Embedding'.format(name))(
-                feature_input)
-
-            # 向量 * 特征值
-            sparse_value = tf.expand_dims(value_input, 2, name='{}-Expend-Dims'.format(name))
-            sparse_value = BatchNormalization(name='{}-BN-1'.format(name))(sparse_value)
-            x = tf.multiply(embedding, sparse_value, name='{}-Multiply'.format(name))
-            # x = BatchNormalization(name='{}-BN-2'.format(name))(x)
-
-            # # Attention
-            weight_output,a = AttentionWithContext()(x)
-            x = K.tanh(K.sum(weight_output, axis=1))
-
-            x = BatchNormalization(name='{}-BN-3'.format(name))(x)
-
-            features.append(x)
-            weight_output_all.append(a)
-        inputs = []
-        inputs.append(x_feature_inputs)
-        inputs.append(x_value_inputs)
-
-    else:
-        for max_length, name in zip(multi_max_features, mult_feature_names):
-            # 输入
-
-            value_input = Input(shape=(max_length,), name='Input-{}-Value'.format(name), dtype='float32')
-
-            x_value_inputs.append(value_input)
-
-            # 向量 * 特征值
-            sparse_value = BatchNormalization(name='{}-BN-1'.format(name))(value_input)
-
-            x = Dense(head_1, name='{}-projection-0'.format(name), activation='relu')(sparse_value)
-
-
-            x = BatchNormalization(name='{}-BN-3'.format(name))(x)
-
-            features.append(x)
-        inputs = []
-        inputs.append(x_value_inputs)
-    # Concatenate
-    if len(features) > 1:
-    #feature = concatenate(features)
-        feature = Add()([features[0],features[1]])
-    else:
-        feature = features[0]
-    dropout = Dropout(rate=drop_rate)(feature)
-    output = Dense(head_1, name='projection-1', activation='relu')(dropout)
-
-    # inputs = []
-    # inputs.append(x_feature_inputs)
-    # inputs.append(x_value_inputs)
-    return tf.keras.Model(inputs=inputs, outputs=[output,weight_output_all])
-
-
-
 class EncoderHead(tf.keras.Model):
-
     def __init__(self, hidden_size=128, dropout=0.05):
         super(EncoderHead, self).__init__()
-        # self.num_classes = num_classes
         self.feature_fc1 = tf.keras.layers.Dense(units=hidden_size, activation='relu')
         self.feature_fc2 = tf.keras.layers.Dense(units=hidden_size, activation='relu')
         self.feature_bn1 = tf.keras.layers.BatchNormalization()

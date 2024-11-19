@@ -112,7 +112,7 @@ def create_tfrecord(source_file,  batch_dict, tfrecord_file, zero_filter=False, 
 
         features = np.array(indexes)
         features = np.reshape(features, (features.shape[1]))
-        values = np.array(values, dtype=np.float)
+        values = np.array(values, dtype=float)
         # values = values / np.linalg.norm(values)
 
         if batch not in batch_examples:
@@ -297,7 +297,7 @@ def create_tfrecord_supervised(source_file,  batch_dict,label_dict, tfrecord_fil
 
         features = np.array(indexes)
         features = np.reshape(features, (features.shape[1]))
-        values = np.array(values, dtype=np.float)
+        values = np.array(values, dtype=float)
         # values = values / np.linalg.norm(values)
 
         if batch not in batch_examples:
@@ -395,7 +395,7 @@ def create_tfrecord_supervised_1batch(source_file, batch_dict,label_dict, tfreco
 
         features = np.array(indexes)
         features = np.reshape(features, (features.shape[1]))
-        values = np.array(values, dtype=np.float)
+        values = np.array(values, dtype=float)
         # values = values / np.linalg.norm(values)
 
         if batch not in batch_examples:
